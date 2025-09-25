@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Subnetting Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .output {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>IP Subnetting Calculator</h1>
+    <div class="container">
+        <label for="ip">IP Address:</label>
+        <input type="text" id="ip" placeholder="e.g., 192.168.1.1"><br><br>
+        <label for="subnets">Number of Subnets:</label>
+        <input type="number" id="subnets" min="1" max="32"><br><br>
+        <button onclick="calculate()">Calculate Subnets</button>
+    </div>
+    <div id="output" class="output"></div>
+
+    <script>
+        function calculate() {
+            const ipInput = document.getElementById('ip').value;
+            const subnetsInput = parseInt(document.getElementById('subnets').value);
+            const output = document.getElementById('output');
+
+            if (!ipInput || isNaN(subnetsInput)) {
+                output.innerHTML = '<span class="error">Please enter valid IP address and number of subnets.</span>';
+                return;
+            }
+
+            try {
+                const subnetCalc = new SubNetting(ipInput, subnetsInput);
+                subnetCalc.outputAll();
+            } catch (error) {
+                output.innerHTML = '<span class="error">' + error.message + '</span>';
+            }
+        }
+
+        class SubNetting {
+            constructor(IP_address, num_subnets) {
+                this.IP_address = IP_address;
+                this.subnet_size = num_subnets;
+                this.original_subnet_size = num_subnets;
+                this.IP_array = [];
+                this.netType = '';
+                this.IP_range = 0;
+
+                // Parse IP
+                const parts = IP_address.split('.');
+                if (parts.length !== 4) throw new Error('Invalid IP address format');
+
+                for (let i = 0; i < 4; i++) {
+                    const num = parseInt(parts[i]);
+                    if (isNaN(num) || num < 0 || num > 255) throw new Error('Invalid IP address');
+                    this.IP_array[i] = num;
+                }
+
+                // Classify IP
+                this.classficateIP();
+
+                // Validate subnet size
+                if (this.subnet_size < 0 || this.subnet_size > 32) {
+                    throw new Error('Invalid subnet size');
+                }
+            }
+
+            classficateIP() {
+                if (this.IP_array[0] >= 0 && this.IP_array[0] <= 127) this.netType = 'A';
+                else if (this.IP_array[0] >= 128 && this.IP_array[0] <= 191) this.netType = 'B';
+                else if (this.IP_array[0] >= 192 && this.IP_array[0] <= 223) this.netType = 'C';
+                else this.netType = 'D';
+            }
+
+            countMaxIP() {
+                let max_IP = 0;
+                if (this.netType === 'A') max_IP = Math.pow(2, 24);
+                else if (this.netType === 'B') max_IP = Math.pow(2, 16);
+                else if (this.netType === 'C') max_IP = Math.pow(2, 8);
+                else throw new Error('Invalid netType, IP is not valid');
+
+                this.subnet_size = Math.pow(2, Math.ceil(Math.log2(this.subnet_size)));
+                this.IP_range = max_IP / this.subnet_size;
+                return this.IP_range;
+            }
+
+            getDefaultIP() {
+                switch (this.netType) {
+                    case 'A':
+                        this.IP_array[1] &= 0;
+                    case 'B':
+                        this.IP_array[2] &= 0;
+                    case 'C':
+                        this.IP_array[3] &= 0;
+                }
+            }
+
+            process_address(address, add_range) {
+                address[3] += add_range;
+                for (let i = 1; i < 4; i++) {
+                    address[4 - i - 1] += Math.floor(address[4 - i] / 256);
+                    address[4 - i] %= 256;
+                }
+            }
+
+            printIP(address) {
+                return address.join('.');
+            }
+
+            outputAll() {
+                const output = document.getElementById('output');
+                let result = '';
+
+                const max_IP = this.countMaxIP();
+                if (max_IP < 4) {
+                    result = 'Not enough IPs to split\n';
+                    output.innerHTML = result;
+                    return;
+                }
+
+                result += 'IP: ' + this.printIP(this.IP_array) + '\n';
+                result += 'Class: ' + this.netType + '\n';
+                result += 'Max IPs: ' + max_IP + '\n';
+                result += 'Subnet size: ' + this.subnet_size + '\n';
+                result += 'IP range per subnet: ' + this.IP_range + '\n\n';
+
+                this.getDefaultIP();
+                result += 'First IP: ' + this.printIP(this.IP_array) + '\n\n';
+
+                let output_arr = [...this.IP_array];
+
+                for (let i = 0; i < this.subnet_size; i++) {
+                    if (i === this.original_subnet_size) break;
+
+                    result += '----------------------------------------\n';
+                    result += 'Subnet: ' + (i + 1) + '\n';
+                    result += 'Network ID: ' + this.printIP(output_arr) + '\n';
+                    result += 'IP range: \n';
+                    result += this.printIP(output_arr) + ' ~ ';
+                    this.process_address(output_arr, this.IP_range - 3);
+                    result += this.printIP(output_arr) + '\n';
+                    this.process_address(output_arr, 1);
+                    result += 'Gateway address: ' + this.printIP(output_arr) + '\n';
+                    this.process_address(output_arr, 1);
+                    result += 'Broadcast address: ' + this.printIP(output_arr) + '\n';
+                    this.process_address(output_arr, 1);
+                    result += '\n';
+                }
+                result += '----------------------------------------\n';
+
+                output.innerHTML = result;
+            }
+        }
+    </script>
+</body>
+</html>
